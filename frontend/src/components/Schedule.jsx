@@ -22,6 +22,10 @@ const formatTimeInput = (value) => {
   return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
 };
 
+const formatScheduleTime = (item) => {
+  return item.time ? formatTimeInput(item.time) : 'All day';
+};
+
 const emptyForm = (date = new Date()) => ({
   type: 'Event',
   title: '',
@@ -104,7 +108,7 @@ const Schedule = () => {
       type: item.type,
       title: item.title || '',
       date: formatDateInput(item.date),
-      time: formatTimeInput(item.time || item.date),
+      time: formatTimeInput(item.time),
       description: item.description || '',
       subject: item.subject || '',
       venue: item.venue || '',
@@ -201,7 +205,7 @@ const Schedule = () => {
                      {item.description && <p>{item.description}</p>}
                      <div className="item-time">
                        <Clock size={14} /> 
-                       <span>{new Date(item.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                       <span>{formatScheduleTime(item)}</span>
                      </div>
                    </div>
                    {canManageSchedule && (

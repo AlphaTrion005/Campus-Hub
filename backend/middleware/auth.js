@@ -23,7 +23,8 @@ const checkRole = (roles) => {
       return res.status(401).json({ message: "Unauthorized" });
     }
 
-    const hasRole = req.user.roles.some(role => roles.includes(role));
+    const userRoles = Array.isArray(req.user.roles) ? req.user.roles : [];
+    const hasRole = userRoles.some(role => roles.includes(role));
     if (!hasRole) {
       return res.status(403).json({ message: "Permission denied" });
     }

@@ -12,7 +12,7 @@ const UserManagement = () => {
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('All');
   const [editingUser, setEditingUser] = useState(null);
-  const [editFormData, setEditFormData] = useState({ name: '', email: '' });
+  const [editFormData, setEditFormData] = useState({ name: '', email: '', branch: '', section: '' });
   const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
@@ -42,7 +42,7 @@ const UserManagement = () => {
 
   const handleStartEdit = (user) => {
     setEditingUser(user._id);
-    setEditFormData({ name: user.name, email: user.email });
+    setEditFormData({ name: user.name, email: user.email, branch: user.branch || '', section: user.section || '' });
   };
 
   const handleCancelEdit = () => {
@@ -72,7 +72,7 @@ const UserManagement = () => {
   };
 
   const filteredUsers = users.filter(u => {
-    const matchesSearch = u.name.toLowerCase().includes(search.toLowerCase()) || 
+    const matchesSearch = u.name.toLowerCase().includes(search.toLowerCase()) ||
                           u.email.toLowerCase().includes(search.toLowerCase());
     const matchesRole = roleFilter === 'All' || u.roles.includes(roleFilter);
     return matchesSearch && matchesRole;
@@ -90,9 +90,9 @@ const UserManagement = () => {
       <div className="admin-controls card">
         <div className="search-bar">
           <Search size={18} />
-          <input 
-            type="text" 
-            placeholder="Search by name or email..." 
+          <input
+            type="text"
+            placeholder="Search by name or email..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
@@ -112,6 +112,7 @@ const UserManagement = () => {
             <thead>
               <tr>
                 <th>User Details</th>
+                <th>Academic</th>
                 <th>Roles</th>
                 <th>Joined</th>
                 <th>Actions</th>
@@ -123,15 +124,15 @@ const UserManagement = () => {
                   <td>
                     {editingUser === u._id ? (
                       <div className="edit-user-form">
-                        <input 
-                          type="text" 
-                          value={editFormData.name} 
+                        <input
+                          type="text"
+                          value={editFormData.name}
                           onChange={(e) => setEditFormData({...editFormData, name: e.target.value})}
                           placeholder="Name"
                         />
-                        <input 
-                          type="email" 
-                          value={editFormData.email} 
+                        <input
+                          type="email"
+                          value={editFormData.email}
                           onChange={(e) => setEditFormData({...editFormData, email: e.target.value})}
                           placeholder="Email"
                         />
@@ -147,15 +148,48 @@ const UserManagement = () => {
                     )}
                   </td>
                   <td>
+                    {editingUser === u._id && u.roles.some(r => !['Admin', 'Developer'].includes(r)) ? (
+                      <div className="edit-user-form" style={{ gap: '0.5rem', display: 'flex', flexDirection: 'column' }}>
+                        <select
+                          value={editFormData.branch}
+                          onChange={(e) => setEditFormData({...editFormData, branch: e.target.value})}
+                          className="admin-select"
+                        >
+                          <option value="">No Branch</option>
+                          <option value="CSE">CSE</option>
+                          <option value="ECE">ECE</option>
+                          <option value="CSM">CSM</option>
+                        </select>
+                        <select
+                          value={editFormData.section}
+                          onChange={(e) => setEditFormData({...editFormData, section: e.target.value})}
+                          className="admin-select"
+                        >
+                          <option value="">No Section</option>
+                          {Array.from({ length: 26 }, (_, i) => String.fromCharCode(65 + i)).map(char => (
+                            <option key={char} value={char}>{char}</option>
+                          ))}
+                        </select>
+                      </div>
+                    ) : (
+                      u.roles.some(r => !['Admin', 'Developer'].includes(r)) && (u.branch || u.section) ? (
+                        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                          {u.branch && <span className="tag blue">{u.branch}</span>}
+                          {u.section && <span className="tag blue">Sec {u.section}</span>}
+                        </div>
+                      ) : <span style={{ color: 'var(--text-muted)' }}>-</span>
+                    )}
+                  </td>
+                  <td>
                     <div className="roles-container">
                       {ROLES.map(role => (
                         <label key={role} className={`role-checkbox ${!canAssignRole(currentUser?.roles, role) ? 'disabled' : ''}`}>
-                          <input 
-                            type="checkbox" 
-                            checked={u.roles.includes(role)} 
+                          <input
+                            type="checkbox"
+                            checked={u.roles.includes(role)}
                             disabled={!canAssignRole(currentUser?.roles, role)}
                             onChange={(e) => {
-                              const newRoles = e.target.checked 
+                              const newRoles = e.target.checked
                                 ? [...u.roles, role]
                                 : u.roles.filter(r => r !== role);
                               handleUpdateRole(u._id, newRoles);
@@ -166,7 +200,7 @@ const UserManagement = () => {
                       ))}
                     </div>
                   </td>
-                  <td>{new Date(u.createdAt).toLocaleDateString()}</td>
+                  <td>{u.createdAt ? new Date(u.createdAt).toLocaleDateString() : '-'}</td>
                   <td>
                     <div className="row-actions">
                       {editingUser === u._id ? (
@@ -183,9 +217,11 @@ const UserManagement = () => {
                           <button className="icon-btn edit" onClick={() => handleStartEdit(u)}>
                             <Edit2 size={18} />
                           </button>
-                          <button className="icon-btn delete" onClick={() => handleDeleteUser(u._id)}>
-                            <Trash2 size={18} />
-                          </button>
+                          {u._id !== currentUser?.id && (
+                            <button className="icon-btn delete" onClick={() => handleDeleteUser(u._id)}>
+                              <Trash2 size={18} />
+                            </button>
+                          )}
                         </>
                       )}
                     </div>

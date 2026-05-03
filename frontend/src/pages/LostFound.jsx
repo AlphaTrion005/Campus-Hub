@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { CheckCircle, MapPin, Plus, RefreshCw, Search } from 'lucide-react';
+import { CheckCircle, MapPin, Plus, RefreshCw, Search, Trash2, ChevronDown, ChevronUp, Clock } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../api/axios';
 import { useAuth } from '../context/useAuth';
@@ -51,8 +51,8 @@ const LostFound = () => {
       await api.post(`/lost-found/${id}/claim`, { message: 'I can identify this item.' });
       toast.success('Claim request sent');
       setRefreshKey((current) => current + 1);
-    } catch {
-      toast.error('Claim request failed');
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Claim request failed');
     }
   };
 
@@ -63,6 +63,32 @@ const LostFound = () => {
       setRefreshKey((current) => current + 1);
     } catch {
       toast.error('Could not update item');
+    }
+  };
+
+  const deleteItem = async (id) => {
+    if (!window.confirm('Delete this item?')) return;
+    try {
+      await api.delete(`/lost-found/${id}`);
+      toast.success('Item deleted');
+      setRefreshKey((current) => current + 1);
+    } catch {
+      toast.error('Failed to delete item');
+    }
+  };
+
+  const [expandedLogs, setExpandedLogs] = useState({});
+
+  const toggleLog = async (id) => {
+    if (expandedLogs[id]) {
+      setExpandedLogs(prev => { const next = {...prev}; delete next[id]; return next; });
+    } else {
+      try {
+        const res = await api.get(`/lost-found/${id}/log`);
+        setExpandedLogs(prev => ({ ...prev, [id]: res.data }));
+      } catch {
+        toast.error('Failed to fetch activity log');
+      }
     }
   };
 
@@ -120,16 +146,41 @@ const LostFound = () => {
                 </div>
                 <div className="card-actions">
                   {(canManageLostFound || item.postedBy?._id === user?.id) && (
-                  <select value={item.status} onChange={(e) => updateStatus(item._id, e.target.value)} aria-label={`Update ${item.title} status`}>
-                    {['Active', 'Claimed', 'Expired'].map((status) => <option key={status}>{status}</option>)}
-                  </select>
+                    <>
+                      <select value={item.status} onChange={(e) => updateStatus(item._id, e.target.value)} aria-label={`Update ${item.title} status`}>
+                        {['Active', 'Claimed', 'Expired'].map((status) => <option key={status}>{status}</option>)}
+                      </select>
+                      <button className="icon-btn delete" type="button" onClick={() => deleteItem(item._id)} aria-label={`Delete ${item.title}`}>
+                        <Trash2 size={18} />
+                      </button>
+                    </>
                   )}
                   {item.status === 'Claimed' ? (
                     <span className="icon-link done" aria-label={`${item.title} claimed`}><CheckCircle size={18} /></span>
-                  ) : (
+                  ) : item.postedBy?._id === user?.id ? null : (
                     <button className="icon-link" type="button" onClick={() => claim(item._id)} aria-label={`Claim ${item.title}`}><Plus size={18} /></button>
                   )}
+                  {canManageLostFound && (
+                    <button className="icon-btn" type="button" onClick={() => toggleLog(item._id)} aria-label="View Activity Log">
+                      {expandedLogs[item._id] ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+                    </button>
+                  )}
                 </div>
+                {expandedLogs[item._id] && (
+                  <div className="activity-log-section" style={{ width: '100%', marginTop: '10px', paddingTop: '10px', borderTop: '1px solid #e2e8f0', gridColumn: '1 / -1' }}>
+                    <h4 style={{ fontSize: '12px', textTransform: 'uppercase', color: '#64748b', marginBottom: '8px' }}>Activity Log</h4>
+                    {expandedLogs[item._id].length === 0 ? <p style={{ fontSize: '13px' }}>No activity yet.</p> : (
+                      <ul style={{ listStyle: 'none', padding: 0, margin: 0, fontSize: '13px' }}>
+                        {expandedLogs[item._id].map((log, idx) => (
+                          <li key={idx} style={{ display: 'flex', gap: '8px', marginBottom: '4px', color: '#475569' }}>
+                            <Clock size={14} style={{ marginTop: '2px' }} />
+                            <span><strong>{log.action}</strong> by {log.performedBy?.name || 'Unknown'} at {new Date(log.timestamp).toLocaleString()}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                )}
               </article>
             )) : <div className="empty-state card"><Search size={36} /><h2>No items found</h2><p>Post an item or adjust filters.</p></div>}
           </section>

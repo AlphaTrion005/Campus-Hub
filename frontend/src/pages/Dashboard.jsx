@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../context/useAuth';
 import Schedule from '../components/Schedule';
-import { BookOpen, Users, Bell, Search } from 'lucide-react';
+import { BookOpen, Bell, Search, Calendar } from 'lucide-react';
 import api from '../api/axios';
 
 const formatRelativeTime = (dateValue) => {
@@ -17,7 +17,7 @@ const formatRelativeTime = (dateValue) => {
 const Dashboard = () => {
   const { user } = useAuth();
   const [summary, setSummary] = useState({
-    stats: { newResources: 0, activeClubs: 0, alerts: 0 },
+    stats: { newResources: 0, activeClubs: 0, alerts: 0, lostFoundActive: 0, upcomingEvents: 0 },
     announcements: [],
   });
   const [loadingSummary, setLoadingSummary] = useState(true);
@@ -29,7 +29,7 @@ const Dashboard = () => {
         setSummary(res.data);
       } catch {
         setSummary({
-          stats: { newResources: 0, activeClubs: 0, alerts: 0 },
+          stats: { newResources: 0, activeClubs: 0, alerts: 0, lostFoundActive: 0, upcomingEvents: 0 },
           announcements: [],
         });
       } finally {
@@ -72,11 +72,20 @@ const Dashboard = () => {
           </div>
           <div className="stat-card card">
             <div className="stat-icon" style={{ background: '#e0f2fe' }}>
-              <Users size={24} color="#0284c7" />
+              <Calendar size={24} color="#0284c7" />
             </div>
             <div className="stat-info">
-              <span>Club Activity</span>
-              <h3>{loadingSummary ? '...' : `${summary.stats.activeClubs} Active`}</h3>
+              <span>Events</span>
+              <h3>{loadingSummary ? '...' : `${summary.stats.upcomingEvents} Upcoming`}</h3>
+            </div>
+          </div>
+          <div className="stat-card card">
+            <div className="stat-icon" style={{ background: '#f3e8ff' }}>
+              <Search size={24} color="#9333ea" />
+            </div>
+            <div className="stat-info">
+              <span>Lost & Found</span>
+              <h3>{loadingSummary ? '...' : `${summary.stats.lostFoundActive} Active`}</h3>
             </div>
           </div>
           <div className="stat-card card">
@@ -94,22 +103,43 @@ const Dashboard = () => {
           <Schedule />
         </div>
 
-        <div className="announcements-section card">
-          <h3>Recent Announcements</h3>
-          <div className="announcement-list">
-            {loadingSummary ? (
-              <p className="no-items">Loading announcements...</p>
-            ) : summary.announcements.length > 0 ? (
-              summary.announcements.map((announcement) => (
-                <div className="announcement-item" key={announcement._id}>
-                  <span className={`tag ${announcement.scope === 'Campus' ? 'blue' : ''}`}>{announcement.scope}</span>
-                  <p>{announcement.title}: {announcement.content}</p>
-                  <small>{formatRelativeTime(announcement.createdAt)}</small>
-                </div>
-              ))
-            ) : (
-              <p className="no-items">No announcements yet.</p>
-            )}
+        <div className="announcements-wrapper">
+          <div className="announcements-section card">
+            <h3>Campus Announcements</h3>
+            <div className="announcement-list">
+              {loadingSummary ? (
+                <p className="no-items">Loading announcements...</p>
+              ) : summary.announcements.filter(a => a.scope !== 'Class').length > 0 ? (
+                summary.announcements.filter(a => a.scope !== 'Class').map((announcement) => (
+                  <div className="announcement-item" key={announcement._id}>
+                    <span className={`tag ${announcement.scope === 'Campus' ? 'blue' : ''}`}>{announcement.scope}</span>
+                    <p>{announcement.title}: {announcement.content}</p>
+                    <small>{formatRelativeTime(announcement.createdAt)}</small>
+                  </div>
+                ))
+              ) : (
+                <p className="no-items">No campus announcements yet.</p>
+              )}
+            </div>
+          </div>
+
+          <div className="announcements-section card">
+            <h3>Class Announcements</h3>
+            <div className="announcement-list">
+              {loadingSummary ? (
+                <p className="no-items">Loading announcements...</p>
+              ) : summary.announcements.filter(a => a.scope === 'Class').length > 0 ? (
+                summary.announcements.filter(a => a.scope === 'Class').map((announcement) => (
+                  <div className="announcement-item" key={announcement._id}>
+                    <span className="tag green">{announcement.scope}</span>
+                    <p>{announcement.title}: {announcement.content}</p>
+                    <small>{formatRelativeTime(announcement.createdAt)}</small>
+                  </div>
+                ))
+              ) : (
+                <p className="no-items">No class announcements yet.</p>
+              )}
+            </div>
           </div>
         </div>
       </div>

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Calendar, CheckCircle, MapPin, Plus, RefreshCw, Search, Users } from 'lucide-react';
+import { Calendar, CheckCircle, MapPin, Plus, RefreshCw, Search, Users, Trash2, Minus } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../api/axios';
 import { useAuth } from '../context/useAuth';
@@ -64,6 +64,27 @@ const Events = () => {
       setRefreshKey((current) => current + 1);
     } catch {
       toast.error('Registration failed');
+    }
+  };
+
+  const withdraw = async (id) => {
+    try {
+      await api.delete(`/events/${id}/register`);
+      toast.success('Withdrawn from event');
+      setRefreshKey((current) => current + 1);
+    } catch {
+      toast.error('Withdraw failed');
+    }
+  };
+
+  const deleteEvent = async (id) => {
+    if (!window.confirm('Delete this event?')) return;
+    try {
+      await api.delete(`/events/${id}`);
+      toast.success('Event deleted');
+      setRefreshKey((current) => current + 1);
+    } catch {
+      toast.error('Failed to delete event');
     }
   };
 
@@ -146,12 +167,21 @@ const Events = () => {
                 </div>
                 <div className="card-actions">
                   {canManageEvents && (
-                  <select value={item.status} onChange={(e) => updateStatus(item._id, e.target.value)} aria-label={`Update ${item.title} status`}>
-                    {['Upcoming', 'Ongoing', 'Completed', 'Cancelled'].map((status) => <option key={status}>{status}</option>)}
-                  </select>
+                    <>
+                      <select value={item.status} onChange={(e) => updateStatus(item._id, e.target.value)} aria-label={`Update ${item.title} status`}>
+                        {['Upcoming', 'Ongoing', 'Completed', 'Cancelled'].map((status) => <option key={status}>{status}</option>)}
+                      </select>
+                      <button className="icon-btn delete" type="button" onClick={() => deleteEvent(item._id)} aria-label={`Delete ${item.title}`}>
+                        <Trash2 size={18} />
+                      </button>
+                    </>
                   )}
-                  {item.status === 'Completed' ? (
-                    <span className="icon-link done" aria-label={`${item.title} completed`}><CheckCircle size={18} /></span>
+                  {item.status === 'Completed' || item.status === 'Cancelled' ? (
+                    <span className="icon-link done" aria-label={`${item.title} ${item.status}`}><CheckCircle size={18} /></span>
+                  ) : item.registeredStudents?.includes(user?.id) ? (
+                    <button className="icon-link" type="button" onClick={() => withdraw(item._id)} aria-label={`Withdraw from ${item.title}`}>
+                      <Minus size={18} />
+                    </button>
                   ) : (
                     <button className="icon-link" type="button" onClick={() => register(item._id)} aria-label={`Register for ${item.title}`}>
                       <Plus size={18} />

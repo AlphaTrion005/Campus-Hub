@@ -105,6 +105,7 @@ button {
   flex-direction: column;
   position: fixed;
   height: 100vh;
+  overflow-y: auto;
 }
 
 .sidebar h2 {

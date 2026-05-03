@@ -12,6 +12,14 @@ const app = express();
 
 app.use(cors());
 app.use(express.json());
+app.use((req, res, next) => {
+  const start = Date.now();
+  res.on('finish', () => {
+    const duration = Date.now() - start;
+    console.log(`${req.method} ${req.url} ${res.statusCode} - ${duration}ms`);
+  });
+  next();
+});
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 const authRoutes = require("./routes/auth");
@@ -23,6 +31,7 @@ const lostFoundRoutes = require("./routes/lostFound");
 const reportRoutes = require("./routes/reports");
 const adminRoutes = require("./routes/admin");
 const dashboardRoutes = require("./routes/dashboard");
+const studentRoutes = require("./routes/students");
 
 app.use("/api/auth", authRoutes);
 app.use("/api/schedule", scheduleRoutes);
@@ -33,6 +42,7 @@ app.use("/api/lost-found", lostFoundRoutes);
 app.use("/api/reports", reportRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/dashboard", dashboardRoutes);
+app.use("/api/students", studentRoutes);
 
 // Test route
 app.get("/", (req, res) => {
@@ -62,6 +72,11 @@ if (!mongoUri) {
 
 if (mongoUri.includes("xxxxx")) {
   console.error("MONGO_URI still contains Atlas placeholder text. Copy the real connection string from Atlas > Connect > Drivers.");
+  process.exit(1);
+}
+
+if (!process.env.JWT_SECRET) {
+  console.error("JWT_SECRET is missing. Add it to backend/.env.");
   process.exit(1);
 }
 

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Download, FileText, RefreshCw, Search, Upload, Trash2 } from 'lucide-react';
+import { Download, FileText, RefreshCw, Search, Upload, Trash2, Edit2, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../api/axios';
 import { useAuth } from '../context/useAuth';
@@ -26,6 +26,7 @@ const Resources = () => {
   const [filters, setFilters] = useState({ search: '', type: 'All', subject: '', semester: '', branch: '', section: '', year: '' });
   const [uploadForm, setUploadForm] = useState(emptyUploadForm);
   const [file, setFile] = useState(null);
+  const [editingResource, setEditingResource] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshKey, setRefreshKey] = useState(0);
   const canManageResources = hasPermission(user, 'manage_resources');
@@ -81,17 +82,46 @@ const Resources = () => {
     if (file) formData.append('file', file);
 
     try {
-      await api.post('/resources', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
-      toast.success('Resource uploaded');
+      if (editingResource) {
+        await api.put(`/resources/${editingResource._id}`, formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
+        toast.success('Resource updated (new version)');
+        setEditingResource(null);
+      } else {
+        await api.post('/resources', formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
+        toast.success('Resource uploaded');
+      }
       setUploadForm(emptyUploadForm);
       setFile(null);
       event.target.reset();
       setRefreshKey((current) => current + 1);
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Upload failed');
+      toast.error(err.response?.data?.message || (editingResource ? 'Update failed' : 'Upload failed'));
     }
+  };
+
+  const startEdit = (resource) => {
+    setEditingResource(resource);
+    setUploadForm({
+      title: resource.title || '',
+      description: resource.description || '',
+      type: resource.type || 'Note',
+      subject: resource.subject || '',
+      semester: resource.semester || '',
+      branch: resource.branch || '',
+      section: resource.section || '',
+      year: resource.year || '',
+    });
+    setFile(null);
+  };
+
+  const cancelEdit = () => {
+    setEditingResource(null);
+    setUploadForm(emptyUploadForm);
+    setFile(null);
   };
 
   const handleDelete = async (resourceId) => {
@@ -125,7 +155,14 @@ const Resources = () => {
       <section className={`feature-layout ${canUpload ? '' : 'single-column'}`}>
         {canUpload && (
           <form className="feature-form card" onSubmit={handleUpload}>
-            <h2>Upload resource</h2>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h2>{editingResource ? 'Update resource' : 'Upload resource'}</h2>
+              {editingResource && (
+                <button type="button" className="icon-btn" onClick={cancelEdit}>
+                  <X size={20} />
+                </button>
+              )}
+            </div>
             <input required name="title" value={uploadForm.title} onChange={handleUploadChange} placeholder="Title" />
             <textarea name="description" value={uploadForm.description} onChange={handleUploadChange} placeholder="Description" />
             <div className="field-row">
@@ -140,10 +177,13 @@ const Resources = () => {
             </div>
             <input name="year" value={uploadForm.year} onChange={handleUploadChange} placeholder="Year" />
             <input name="subject" value={uploadForm.subject} onChange={handleUploadChange} placeholder="Subject" />
-            <input type="file" onChange={(event) => setFile(event.target.files[0] || null)} />
+
+            {editingResource && <small className="field-hint">Upload a new file to increment the version, or leave blank to only update details.</small>}
+            <input type={editingResource ? "file" : "file"} required={!editingResource} onChange={(event) => setFile(event.target.files[0] || null)} />
+
             <button className="btn-primary" type="submit">
-              <Upload size={18} />
-              Upload
+              {editingResource ? <Edit2 size={18} /> : <Upload size={18} />}
+              {editingResource ? 'Update Version' : 'Upload'}
             </button>
           </form>
         )}
@@ -193,9 +233,14 @@ const Resources = () => {
                       </a>
                     )}
                     {canDeleteResource(resource) && (
-                      <button className="icon-btn delete" onClick={() => handleDelete(resource._id)} title="Delete resource">
-                        <Trash2 size={18} />
-                      </button>
+                      <>
+                        <button className="icon-btn" onClick={() => startEdit(resource)} title="Edit resource">
+                          <Edit2 size={18} />
+                        </button>
+                        <button className="icon-btn delete" onClick={() => handleDelete(resource._id)} title="Delete resource">
+                          <Trash2 size={18} />
+                        </button>
+                      </>
                     )}
                   </div>
                 </article>

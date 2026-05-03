@@ -3,8 +3,10 @@ const fs = require("fs");
 const path = require("path");
 const multer = require("multer");
 const Resource = require("../models/Resource");
-const { auth, checkPermission, checkAnyPermission } = require("../middleware/auth");
+const AuditLog = require("../models/AuditLog");
+const { auth, checkAnyPermission } = require("../middleware/auth");
 const { hasPermission } = require("../utils/roles");
+const { createSearchRegex } = require("../utils/search");
 
 const router = express.Router();
 const uploadDir = path.join(__dirname, "..", "uploads");
@@ -18,6 +20,16 @@ const storage = multer.diskStorage({
   },
 });
 const upload = multer({ storage });
+const classRepResourceTypes = ["Note", "Writing Material"];
+
+const removeUploadedFile = (file) => {
+  if (!file?.path) return;
+  try {
+    if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
+  } catch {
+    // Ignore cleanup failures; the API response should reflect the validation error.
+  }
+};
 
 // Get all resources for the college
 router.get("/", auth, async (req, res) => {
@@ -28,18 +40,19 @@ router.get("/", auth, async (req, res) => {
     let query = { collegeId };
 
     if (type) query.type = type;
-    if (subject) query.subject = new RegExp(subject, 'i');
+    if (subject) query.subject = createSearchRegex(subject);
     if (semester) query.semester = semester;
-    if (branch) query.branch = new RegExp(branch, 'i');
-    if (section) query.section = new RegExp(section, 'i');
+    if (branch) query.branch = createSearchRegex(branch);
+    if (section) query.section = createSearchRegex(section);
     if (year) query.year = year;
     if (search) {
+      const searchRegex = createSearchRegex(search);
       query.$or = [
-        { title: new RegExp(search, 'i') },
-        { description: new RegExp(search, 'i') },
-        { subject: new RegExp(search, 'i') },
-        { branch: new RegExp(search, 'i') },
-        { section: new RegExp(search, 'i') }
+        { title: searchRegex },
+        { description: searchRegex },
+        { subject: searchRegex },
+        { branch: searchRegex },
+        { section: searchRegex }
       ];
     }
 
@@ -56,10 +69,16 @@ router.post("/", auth, checkAnyPermission(["manage_resources", "upload_class_res
     const { title, description, type, subject, semester, branch, section, year } = req.body;
     const canManageResources = hasPermission(req.user.roles || [], "manage_resources");
 
-    if (!canManageResources && !["Note", "Writing Material"].includes(type)) {
+    if (!title || !type) {
+      removeUploadedFile(req.file);
+      return res.status(400).json({ message: "Title and type are required" });
+    }
+
+    if (!canManageResources && !classRepResourceTypes.includes(type)) {
+      removeUploadedFile(req.file);
       return res.status(403).json({ message: "Class reps can upload only notes and writing material" });
     }
-    
+
     const fileUrl = req.file ? `/uploads/${req.file.filename}` : "";
 
     const resource = new Resource({
@@ -77,6 +96,15 @@ router.post("/", auth, checkAnyPermission(["manage_resources", "upload_class_res
     });
 
     await resource.save();
+
+    await AuditLog.create({
+      action: "RESOURCE_CREATE",
+      category: "Resource",
+      performedBy: req.user.id,
+      details: `Uploaded resource: ${title} (${type})`,
+      collegeId: req.user.collegeId
+    });
+
     res.status(201).json(resource);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -84,10 +112,26 @@ router.post("/", auth, checkAnyPermission(["manage_resources", "upload_class_res
 });
 
 // Update resource (with versioning)
-router.put("/:id", auth, checkPermission("manage_resources"), upload.single("file"), async (req, res) => {
+router.put("/:id", auth, checkAnyPermission(["manage_resources", "upload_class_resources"]), upload.single("file"), async (req, res) => {
   try {
     const resource = await Resource.findOne({ _id: req.params.id, collegeId: req.user.collegeId });
-    if (!resource) return res.status(404).json({ message: "Resource not found" });
+    if (!resource) {
+      removeUploadedFile(req.file);
+      return res.status(404).json({ message: "Resource not found" });
+    }
+
+    const canManage = hasPermission(req.user.roles || [], "manage_resources");
+    const isOwner = resource.uploadedBy.toString() === req.user.id;
+    if (!canManage && !isOwner) {
+      removeUploadedFile(req.file);
+      return res.status(403).json({ message: "You can only update your own resources" });
+    }
+
+    const requestedType = req.body.type || resource.type;
+    if (!canManage && !classRepResourceTypes.includes(requestedType)) {
+      removeUploadedFile(req.file);
+      return res.status(403).json({ message: "Class reps can update only notes and writing material" });
+    }
 
     // Store current in history
     resource.history.push({
@@ -100,7 +144,7 @@ router.put("/:id", auth, checkPermission("manage_resources"), upload.single("fil
     if (req.file) {
       resource.fileUrl = `/uploads/${req.file.filename}`;
     }
-    
+
     const { title, description, type, subject, semester, branch, section, year } = req.body;
     if (title !== undefined) resource.title = title;
     if (description !== undefined) resource.description = description;
@@ -110,9 +154,17 @@ router.put("/:id", auth, checkPermission("manage_resources"), upload.single("fil
     if (branch !== undefined) resource.branch = branch;
     if (section !== undefined) resource.section = section;
     if (year !== undefined) resource.year = year;
-    
+
     await resource.save();
-    
+
+    await AuditLog.create({
+      action: "RESOURCE_UPDATE",
+      category: "Resource",
+      performedBy: req.user.id,
+      details: `Updated resource: ${resource.title} (v${resource.version})`,
+      collegeId: req.user.collegeId
+    });
+
     res.json(resource);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -141,6 +193,15 @@ router.delete("/:id", auth, checkAnyPermission(["manage_resources", "upload_clas
     }
 
     await Resource.findByIdAndDelete(req.params.id);
+
+    await AuditLog.create({
+      action: "RESOURCE_DELETE",
+      category: "Resource",
+      performedBy: req.user.id,
+      details: `Deleted resource: ${resource.title}`,
+      collegeId: req.user.collegeId
+    });
+
     res.json({ message: "Resource deleted successfully" });
   } catch (err) {
     res.status(500).json({ error: err.message });

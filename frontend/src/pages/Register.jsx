@@ -13,7 +13,9 @@ const Register = () => {
     name: '',
     email: '',
     password: '',
-    roles: ['Student']
+    roles: ['Student'],
+    branch: '',
+    section: ''
   });
   const [file, setFile] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -45,7 +47,16 @@ const Register = () => {
     setFormData((current) => {
       const hasRole = current.roles.includes(role);
       const nextRoles = hasRole ? current.roles.filter((item) => item !== role) : [...current.roles, role];
-      return { ...current, roles: nextRoles.length ? nextRoles : ['Student'] };
+      const finalRoles = nextRoles.length ? nextRoles : ['Student'];
+
+      const showBranchSection = finalRoles.some(r => !['Admin', 'Developer'].includes(r));
+
+      return {
+        ...current,
+        roles: finalRoles,
+        branch: showBranchSection ? current.branch : '',
+        section: showBranchSection ? current.section : ''
+      };
     });
   };
 
@@ -63,7 +74,7 @@ const Register = () => {
       };
       await api.post('/auth/register', data);
       toast.success('User registered successfully!');
-      setFormData({ name: '', email: '', password: '', roles: ['Student'] });
+      setFormData({ name: '', email: '', password: '', roles: ['Student'], branch: '', section: '' });
     } catch (err) {
       toast.error(err.response?.data?.message || 'Registration failed');
     } finally {
@@ -74,7 +85,7 @@ const Register = () => {
   const handleBulkSubmit = async (e) => {
     e.preventDefault();
     if (!file) return toast.error('Please select an Excel file');
-    
+
     setLoading(true);
     const bulkData = new FormData();
     bulkData.append('file', file);
@@ -103,13 +114,13 @@ const Register = () => {
         <p>Create new campus accounts individually or in bulk</p>
 
         <div className="tab-container">
-          <button 
+          <button
             className={`tab-btn ${activeTab === 'single' ? 'active' : ''}`}
             onClick={() => setActiveTab('single')}
           >
             <UserPlus size={18} /> Single User
           </button>
-          <button 
+          <button
             className={`tab-btn ${activeTab === 'bulk' ? 'active' : ''}`}
             onClick={() => setActiveTab('bulk')}
           >
@@ -146,6 +157,30 @@ const Register = () => {
                 ))}
               </div>
             </div>
+
+            {formData.roles.some(r => !['Admin', 'Developer'].includes(r)) && (
+              <div className="field-row">
+                <div className="input-group">
+                  <label>Branch {formData.roles.includes('Student') && <span style={{color: 'red'}}>*</span>}</label>
+                  <select name="branch" value={formData.branch} onChange={handleChange} required={formData.roles.includes('Student')}>
+                    <option value="">Select Branch</option>
+                    <option value="CSE">CSE</option>
+                    <option value="ECE">ECE</option>
+                    <option value="CSM">CSM</option>
+                  </select>
+                </div>
+                <div className="input-group">
+                  <label>Section {formData.roles.includes('Student') && <span style={{color: 'red'}}>*</span>}</label>
+                  <select name="section" value={formData.section} onChange={handleChange} required={formData.roles.includes('Student')}>
+                    <option value="">Select Section</option>
+                    {Array.from({ length: 26 }, (_, i) => String.fromCharCode(65 + i)).map(char => (
+                      <option key={char} value={char}>{char}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            )}
+
             <button type="submit" className="btn-primary" disabled={loading}>
               {loading ? 'Creating...' : 'Register User'}
             </button>
@@ -153,8 +188,8 @@ const Register = () => {
         ) : (
           <div className="bulk-upload-section">
             <div className="info-box">
-              <p>Upload an Excel file (.xlsx) with columns: <strong>name, email, password, roles</strong></p>
-              <small>(roles can be comma-separated for multiple roles)</small>
+              <p>Upload an Excel file (.xlsx) with columns: <strong>name, email, password, roles, branch, section</strong></p>
+              <small>(roles can be comma-separated. branch and section are mandatory for Students)</small>
             </div>
             <form onSubmit={handleBulkSubmit}>
               <div className="file-input-wrapper">

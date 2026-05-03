@@ -11,6 +11,7 @@ import LostFound from './pages/LostFound';
 import Clubs from './pages/Clubs';
 import Reports from './pages/Reports';
 import Profile from './pages/Profile';
+import StudentList from './pages/StudentList';
 import AdminUsers from './pages/AdminUsers';
 import AdminLogs from './pages/AdminLogs';
 import AdminSettings from './pages/AdminSettings';
@@ -30,6 +31,10 @@ const Sidebar = () => {
     { path: '/reports', icon: <AlertCircle size={20} />, label: 'Reports' },
     { path: '/profile', icon: <User size={20} />, label: 'Profile' },
   ];
+
+  if (hasPermission(user, 'manage_resources')) {
+    navItems.splice(2, 0, { path: '/students', icon: <Users size={20} />, label: 'Students' });
+  }
 
   if (hasPermission(user, 'manage_users') || hasPermission(user, 'manage_non_admin_users')) {
     navItems.push({ path: '/register', icon: <UserPlus size={20} />, label: 'Registration' });
@@ -105,6 +110,11 @@ function App() {
           <Route path="/resources" element={
             <ProtectedRoute>
               <Layout><Resources /></Layout>
+            </ProtectedRoute>
+          } />
+          <Route path="/students" element={
+            <ProtectedRoute>
+              <Layout><StudentList /></Layout>
             </ProtectedRoute>
           } />
           <Route path="/events" element={

@@ -5,16 +5,44 @@ const multer = require("multer");
 const xlsx = require("xlsx");
 const User = require("../models/User");
 const College = require("../models/College");
+const Event = require("../models/Event");
+const Club = require("../models/Club");
 const { auth, checkRole } = require("../middleware/auth");
 const { ROLES, canAssignRole } = require("../utils/roles");
 
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage() });
+const adminRoles = ["Admin", "Developer", "Sub-admin"];
+
+const serializeUser = (user) => ({
+  id: user._id,
+  name: user.name,
+  email: user.email,
+  roles: user.roles,
+  collegeId: user.collegeId,
+  branch: user.branch,
+  section: user.section,
+});
+
+const registrationsAreClosed = async (actor) => {
+  if (actor.roles?.includes("Developer")) return false;
+  const college = actor.collegeId ? await College.findById(actor.collegeId) : null;
+  return college?.settings?.allowRegistrations === false;
+};
 
 // Register (Single) - Protected
 router.post("/register", auth, checkRole(["Admin", "Developer", "Sub-admin"]), async (req, res) => {
   try {
-    const { name, email, password, roles, collegeId } = req.body;
+    if (await registrationsAreClosed(req.user)) {
+      return res.status(403).json({ message: "New registrations are currently disabled" });
+    }
+
+    const { name, email, password, roles, collegeId, branch, section } = req.body;
+    const normalizedEmail = String(email || "").trim().toLowerCase();
+    if (!name || !normalizedEmail || !password) {
+      return res.status(400).json({ message: "Name, email, and password are required" });
+    }
+
     const requestedRoles = Array.isArray(roles) && roles.length > 0 ? roles : ["Student"];
 
     const invalidRole = requestedRoles.find((role) => !ROLES.includes(role));
@@ -27,8 +55,14 @@ router.post("/register", auth, checkRole(["Admin", "Developer", "Sub-admin"]), a
       return res.status(403).json({ message: `You cannot assign the ${blockedRole} role` });
     }
 
+    if (requestedRoles.includes("Student")) {
+      if (!branch || !section) {
+        return res.status(400).json({ message: "Branch and Section are mandatory for Students" });
+      }
+    }
+
     // Check if user exists
-    let user = await User.findOne({ email });
+    let user = await User.findOne({ email: normalizedEmail });
     if (user) {
       return res.status(400).json({ message: "User already exists" });
     }
@@ -40,10 +74,12 @@ router.post("/register", auth, checkRole(["Admin", "Developer", "Sub-admin"]), a
     // Create user
     user = new User({
       name,
-      email,
+      email: normalizedEmail,
       password: hashedPassword,
       collegeId: collegeId || req.user.collegeId,
-      roles: requestedRoles
+      roles: requestedRoles,
+      ...(branch && { branch }),
+      ...(section && { section })
     });
 
     await user.save();
@@ -56,6 +92,10 @@ router.post("/register", auth, checkRole(["Admin", "Developer", "Sub-admin"]), a
 // Bulk Register - Protected
 router.post("/bulk-register", auth, checkRole(["Admin", "Developer", "Sub-admin"]), upload.single("file"), async (req, res) => {
   try {
+    if (await registrationsAreClosed(req.user)) {
+      return res.status(403).json({ message: "New registrations are currently disabled" });
+    }
+
     if (!req.file) {
       return res.status(400).json({ message: "Please upload an excel file" });
     }
@@ -72,18 +112,19 @@ router.post("/bulk-register", auth, checkRole(["Admin", "Developer", "Sub-admin"
 
     for (const row of data) {
       try {
-        const { name, email, password, roles } = row;
+        const { name, email, password, roles, branch, section } = row;
+        const normalizedEmail = String(email || "").trim().toLowerCase();
         
-        if (!email || !password) {
+        if (!name || !normalizedEmail || !password) {
           results.failed++;
-          results.errors.push(`Missing email or password for ${name}`);
+          results.errors.push(`Missing name, email, or password for ${name || normalizedEmail || "row"}`);
           continue;
         }
 
-        let user = await User.findOne({ email });
+        let user = await User.findOne({ email: normalizedEmail });
         if (user) {
           results.failed++;
-          results.errors.push(`User ${email} already exists`);
+          results.errors.push(`User ${normalizedEmail} already exists`);
           continue;
         }
 
@@ -91,15 +132,23 @@ router.post("/bulk-register", auth, checkRole(["Admin", "Developer", "Sub-admin"
         const invalidRole = requestedRoles.find((role) => !ROLES.includes(role));
         if (invalidRole) {
           results.failed++;
-          results.errors.push(`Invalid role ${invalidRole} for ${email}`);
+          results.errors.push(`Invalid role ${invalidRole} for ${normalizedEmail}`);
           continue;
         }
 
         const blockedRole = requestedRoles.find((role) => !canAssignRole(req.user.roles || [], role));
         if (blockedRole) {
           results.failed++;
-          results.errors.push(`Cannot assign ${blockedRole} to ${email}`);
+          results.errors.push(`Cannot assign ${blockedRole} to ${normalizedEmail}`);
           continue;
+        }
+
+        if (requestedRoles.includes("Student")) {
+          if (!branch || !section) {
+            results.failed++;
+            results.errors.push(`Missing branch or section for Student ${normalizedEmail}`);
+            continue;
+          }
         }
 
         const salt = await bcrypt.genSalt(10);
@@ -107,17 +156,19 @@ router.post("/bulk-register", auth, checkRole(["Admin", "Developer", "Sub-admin"
 
         user = new User({
           name,
-          email,
+          email: normalizedEmail,
           password: hashedPassword,
           collegeId: req.user.collegeId,
-          roles: requestedRoles
+          roles: requestedRoles,
+          ...(branch && { branch }),
+          ...(section && { section })
         });
 
         await user.save();
         results.success++;
       } catch (err) {
         results.failed++;
-        results.errors.push(`Error creating ${row.email}: ${err.message}`);
+        results.errors.push(`Error creating ${row.email || "row"}: ${err.message}`);
       }
     }
 
@@ -131,8 +182,12 @@ router.post("/bulk-register", auth, checkRole(["Admin", "Developer", "Sub-admin"
 router.post("/login", async (req, res) => {
   try {
     const { email, password } = req.body;
+    const normalizedEmail = String(email || "").trim().toLowerCase();
+    if (!normalizedEmail || !password) {
+      return res.status(400).json({ message: "Invalid credentials" });
+    }
 
-    const user = await User.findOne({ email });
+    const user = await User.findOne({ email: normalizedEmail });
     if (!user) {
       return res.status(400).json({ message: "Invalid credentials" });
     }
@@ -140,6 +195,12 @@ router.post("/login", async (req, res) => {
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
       return res.status(400).json({ message: "Invalid credentials" });
+    }
+
+    const college = user.collegeId ? await College.findById(user.collegeId) : null;
+    const isAdmin = user.roles?.some((role) => adminRoles.includes(role));
+    if (college?.settings?.maintenanceMode && !isAdmin) {
+      return res.status(403).json({ message: "Campus Hub is currently in maintenance mode" });
     }
 
     const token = jwt.sign(
@@ -150,12 +211,7 @@ router.post("/login", async (req, res) => {
 
     res.json({
       token,
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        roles: user.roles
-      }
+      user: serializeUser(user)
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -167,9 +223,11 @@ router.put("/profile", auth, async (req, res) => {
   try {
     const { name } = req.body;
     const user = await User.findById(req.user.id);
+    if (!user) return res.status(404).json({ message: "User not found" });
+
     if (name) user.name = name;
     await user.save();
-    res.json({ message: "Profile updated successfully", user: { id: user._id, name: user.name, email: user.email, roles: user.roles } });
+    res.json({ message: "Profile updated successfully", user: serializeUser(user) });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -180,6 +238,7 @@ router.put("/change-password", auth, async (req, res) => {
   try {
     const { currentPassword, newPassword } = req.body;
     const user = await User.findById(req.user.id);
+    if (!user) return res.status(404).json({ message: "User not found" });
 
     const isMatch = await bcrypt.compare(currentPassword, user.password);
     if (!isMatch) {
@@ -191,6 +250,20 @@ router.put("/change-password", auth, async (req, res) => {
     await user.save();
 
     res.json({ message: "Password changed successfully" });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Get My Activity
+router.get("/my-activity", auth, async (req, res) => {
+  try {
+    const [events, clubs] = await Promise.all([
+      Event.find({ registeredStudents: req.user.id, collegeId: req.user.collegeId }).select("title date"),
+      Club.find({ "applications.user": req.user.id, "applications.status": "Approved", collegeId: req.user.collegeId }).select("name category")
+    ]);
+
+    res.json({ events, clubs });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

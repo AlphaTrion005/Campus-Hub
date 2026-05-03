@@ -6,11 +6,15 @@ import { Activity, User, Clock } from 'lucide-react';
 const AdminLogs = () => {
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [category, setCategory] = useState('');
 
   useEffect(() => {
     const fetchLogs = async () => {
+      setLoading(true);
       try {
-        const res = await api.get('/admin/logs');
+        const params = {};
+        if (category) params.category = category;
+        const res = await api.get('/admin/logs', { params });
         setLogs(res.data);
       } catch {
         toast.error('Failed to fetch audit logs');
@@ -20,7 +24,7 @@ const AdminLogs = () => {
     };
 
     fetchLogs();
-  }, []);
+  }, [category]);
 
   const getActionColor = (action) => {
     switch (action) {
@@ -37,10 +41,16 @@ const AdminLogs = () => {
           <h1>Audit Logs</h1>
           <p>Track administrative actions and system changes.</p>
         </div>
+        <select value={category} onChange={(e) => setCategory(e.target.value)} style={{ padding: '8px', borderRadius: '6px', border: '1px solid #cbd5e1' }}>
+          <option value="">All Categories</option>
+          {['User', 'Resource', 'Event', 'LostFound', 'Club', 'System', 'Other'].map(c => (
+            <option key={c} value={c}>{c}</option>
+          ))}
+        </select>
       </header>
 
       <div className="logs-list-area card">
-        {loading ? <p>Loading logs...</p> : logs.length === 0 ? <p>No logs found.</p> : (
+        {loading ? <p>Loading logs...</p> : logs.length === 0 ? <p>No logs found for this category.</p> : (
           <div className="audit-timeline">
             {logs.map(log => (
               <div key={log._id} className="audit-item">

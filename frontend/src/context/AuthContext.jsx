@@ -6,11 +6,15 @@ const getStoredUser = () => {
   const token = localStorage.getItem('token');
   const storedUser = localStorage.getItem('user');
 
-  if (!token || !storedUser) return null;
+  if (!token || !storedUser) {
+    if (!storedUser) localStorage.removeItem('token');
+    return null;
+  }
 
   try {
     return JSON.parse(storedUser);
   } catch {
+    localStorage.removeItem('token');
     localStorage.removeItem('user');
     return null;
   }
@@ -32,6 +36,11 @@ export const AuthProvider = ({ children }) => {
     await api.post('/auth/register', userData);
   };
 
+  const updateUser = (userData) => {
+    localStorage.setItem('user', JSON.stringify(userData));
+    setUser(userData);
+  };
+
   const logout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
@@ -39,7 +48,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading: false, login, register, logout }}>
+    <AuthContext.Provider value={{ user, loading: false, login, register, updateUser, logout }}>
       {children}
     </AuthContext.Provider>
   );

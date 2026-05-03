@@ -28,10 +28,17 @@ const lostFoundSchema = new mongoose.Schema({
     status: { type: String, enum: ["Pending", "Approved", "Rejected"], default: "Pending" },
     requestedAt: { type: Date, default: Date.now }
   }],
+  activityLog: [{
+    action: String,
+    performedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+    timestamp: { type: Date, default: Date.now }
+  }],
   expiresAt: {
     type: Date,
     default: () => new Date(+new Date() + 30 * 24 * 60 * 60 * 1000) // 30 days from now
   }
 }, { timestamps: true });
+
+lostFoundSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 
 module.exports = mongoose.model("LostFound", lostFoundSchema);
