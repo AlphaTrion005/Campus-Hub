@@ -20,7 +20,6 @@ const storage = multer.diskStorage({
   },
 });
 const upload = multer({ storage });
-const classRepResourceTypes = ["Note", "Writing Material"];
 
 const removeUploadedFile = (file) => {
   if (!file?.path) return;
@@ -67,16 +66,35 @@ router.get("/", auth, async (req, res) => {
 router.post("/", auth, checkAnyPermission(["manage_resources", "upload_class_resources"]), upload.single("file"), async (req, res) => {
   try {
     const { title, description, type, subject, semester, branch, section, year } = req.body;
-    const canManageResources = hasPermission(req.user.roles || [], "manage_resources");
 
     if (!title || !type) {
       removeUploadedFile(req.file);
       return res.status(400).json({ message: "Title and type are required" });
     }
 
-    if (!canManageResources && !classRepResourceTypes.includes(type)) {
+    const user = await User.findById(req.user.id);
+    if (!user) {
       removeUploadedFile(req.file);
-      return res.status(403).json({ message: "Class reps can upload only notes and writing material" });
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    const userRoles = user.roles || [];
+    const isAdministrative = userRoles.some(r => ["Developer", "Admin", "Sub-admin"].includes(r));
+
+    if (!isAdministrative) {
+      const isTeacher = userRoles.includes("Teacher");
+      const isClassRep = userRoles.includes("Class Rep");
+
+      if (isTeacher || isClassRep) {
+        if (!branch || !section) {
+          removeUploadedFile(req.file);
+          return res.status(400).json({ message: "Branch and section are required" });
+        }
+        if (!user.branch.includes(branch) || !user.section.includes(section)) {
+          removeUploadedFile(req.file);
+          return res.status(403).json({ message: `You are not assigned to class ${branch}-${section}` });
+        }
+      }
     }
 
     const fileUrl = req.file ? `/uploads/${req.file.filename}` : "";
@@ -120,17 +138,29 @@ router.put("/:id", auth, checkAnyPermission(["manage_resources", "upload_class_r
       return res.status(404).json({ message: "Resource not found" });
     }
 
-    const canManage = hasPermission(req.user.roles || [], "manage_resources");
-    const isOwner = resource.uploadedBy.toString() === req.user.id;
-    if (!canManage && !isOwner) {
+    const { title, description, type, subject, semester, branch, section, year } = req.body;
+
+    const user = await User.findById(req.user.id);
+    if (!user) {
       removeUploadedFile(req.file);
-      return res.status(403).json({ message: "You can only update your own resources" });
+      return res.status(404).json({ message: "User not found" });
     }
 
-    const requestedType = req.body.type || resource.type;
-    if (!canManage && !classRepResourceTypes.includes(requestedType)) {
-      removeUploadedFile(req.file);
-      return res.status(403).json({ message: "Class reps can update only notes and writing material" });
+    const userRoles = user.roles || [];
+    const isAdministrative = userRoles.some(r => ["Developer", "Admin", "Sub-admin"].includes(r));
+
+    if (!isAdministrative) {
+      const isTeacher = userRoles.includes("Teacher");
+      const isClassRep = userRoles.includes("Class Rep");
+
+      if (isTeacher || isClassRep) {
+        const targetBranch = branch || resource.branch;
+        const targetSection = section || resource.section;
+        if (!user.branch.includes(targetBranch) || !user.section.includes(targetSection)) {
+          removeUploadedFile(req.file);
+          return res.status(403).json({ message: `You are not assigned to class ${targetBranch}-${targetSection}` });
+        }
+      }
     }
 
     // Store current in history
@@ -145,7 +175,6 @@ router.put("/:id", auth, checkAnyPermission(["manage_resources", "upload_class_r
       resource.fileUrl = `/uploads/${req.file.filename}`;
     }
 
-    const { title, description, type, subject, semester, branch, section, year } = req.body;
     if (title !== undefined) resource.title = title;
     if (description !== undefined) resource.description = description;
     if (type !== undefined) resource.type = type;
@@ -177,8 +206,16 @@ router.delete("/:id", auth, checkAnyPermission(["manage_resources", "upload_clas
     const resource = await Resource.findOne({ _id: req.params.id, collegeId: req.user.collegeId });
     if (!resource) return res.status(404).json({ message: "Resource not found" });
 
+    const userRoles = req.user.roles || [];
+    const canManage = hasPermission(userRoles, "manage_resources");
+    const isClassRep = userRoles.includes("Class Rep");
+
+    // Restriction: Class Reps cannot delete resources (even their own) to prevent accidental removal
+    if (isClassRep && !canManage) {
+      return res.status(403).json({ message: "Class Representatives are not allowed to delete resources" });
+    }
+
     const isOwner = resource.uploadedBy.toString() === req.user.id;
-    const canManage = hasPermission(req.user.roles || [], "manage_resources");
 
     if (!isOwner && !canManage) {
       return res.status(403).json({ message: "You can only delete your own resources" });

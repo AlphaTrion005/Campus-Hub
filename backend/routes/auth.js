@@ -72,14 +72,17 @@ router.post("/register", auth, checkRole(["Admin", "Developer", "Sub-admin"]), a
     const hashedPassword = await bcrypt.hash(password, salt);
 
     // Create user
+    const branchArray = Array.isArray(branch) ? branch : (branch ? branch.split(",").map(b => b.trim()) : []);
+    const sectionArray = Array.isArray(section) ? section : (section ? section.split(",").map(s => s.trim()) : []);
+
     user = new User({
       name,
       email: normalizedEmail,
       password: hashedPassword,
       collegeId: collegeId || req.user.collegeId,
       roles: requestedRoles,
-      ...(branch && { branch }),
-      ...(section && { section })
+      branch: branchArray,
+      section: sectionArray
     });
 
     await user.save();
@@ -154,14 +157,17 @@ router.post("/bulk-register", auth, checkRole(["Admin", "Developer", "Sub-admin"
         const salt = await bcrypt.genSalt(10);
         const hashedPassword = await bcrypt.hash(password.toString(), salt);
 
+        const branchArray = branch ? branch.toString().split(",").map(b => b.trim()) : [];
+        const sectionArray = section ? section.toString().split(",").map(s => s.trim()) : [];
+
         user = new User({
           name,
           email: normalizedEmail,
           password: hashedPassword,
           collegeId: req.user.collegeId,
           roles: requestedRoles,
-          ...(branch && { branch }),
-          ...(section && { section })
+          branch: branchArray,
+          section: sectionArray
         });
 
         await user.save();

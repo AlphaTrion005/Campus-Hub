@@ -16,15 +16,15 @@ const userSchema = new mongoose.Schema({
     ref: "College",
   },
 
-  branch: {
+  branch: [{
     type: String,
     enum: ["CSE", "ECE", "CSM"],
-  },
+  }],
 
-  section: {
+  section: [{
     type: String,
     enum: ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z"],
-  },
+  }],
 }, { timestamps: true });
 
 module.exports = mongoose.model("User", userSchema);
