@@ -17,6 +17,7 @@ import AdminLogs from './pages/AdminLogs';
 import AdminSettings from './pages/AdminSettings';
 import { hasPermission } from './utils/roles';
 import { LayoutDashboard, FileText, Calendar, Search, Users, AlertCircle, LogOut, UserPlus, User, Settings, List, Wrench } from 'lucide-react';
+import logo from './assets/logo.png';
 
 const Sidebar = () => {
   const { logout, user } = useAuth();
@@ -51,7 +52,10 @@ const Sidebar = () => {
 
   return (
     <aside className="sidebar">
-      <h2>Campus Hub</h2>
+      <div className="logo-container">
+        <img src={logo} alt="Campus Hub Logo" className="logo-img" />
+        <h2>Campus Hub</h2>
+      </div>
       <nav>
         <ul>
           {navItems.map((item) => (

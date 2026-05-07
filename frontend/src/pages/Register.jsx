@@ -5,6 +5,7 @@ import api from '../api/axios';
 import { toast } from 'react-hot-toast';
 import { UserPlus, FileUp, ShieldAlert } from 'lucide-react';
 import { ROLES, canAssignRole } from '../utils/roles';
+import logo from '../assets/logo.png';
 
 const Register = () => {
   const { user } = useAuth();
@@ -110,6 +111,7 @@ const Register = () => {
   return (
     <div className="auth-container" style={{ padding: '2rem' }}>
       <div className="auth-card card" style={{ maxWidth: '600px' }}>
+        <img src={logo} alt="Campus Hub Logo" style={{ width: '60px', height: '60px', margin: '0 auto 1rem', display: 'block' }} />
         <h2>Registration Management</h2>
         <p>Create new campus accounts individually or in bulk</p>
 
