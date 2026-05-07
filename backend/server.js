@@ -14,15 +14,20 @@ const allowedOrigins = (process.env.FRONTEND_URL || "http://localhost:5173")
   .split(",")
   .map((origin) => origin.trim())
   .filter(Boolean);
+const allowedVercelOriginPattern = /^https:\/\/campus-[a-z0-9-]+-sprachethasa-1562s-projects\.vercel\.app$/;
 
 app.use(cors({
   origin(origin, callback) {
-    if (!origin || allowedOrigins.includes(origin)) {
+    if (
+      !origin ||
+      allowedOrigins.includes(origin) ||
+      allowedVercelOriginPattern.test(origin)
+    ) {
       callback(null, true);
       return;
     }
 
-    callback(new Error("Not allowed by CORS"));
+    callback(null, false);
   },
 }));
 app.use(express.json());
