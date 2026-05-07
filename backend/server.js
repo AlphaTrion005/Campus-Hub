@@ -9,8 +9,22 @@ const College = require("./models/College");
 const { auth, checkPermission } = require("./middleware/auth");
 
 const app = express();
+const PORT = process.env.PORT || 5000;
+const allowedOrigins = (process.env.FRONTEND_URL || "http://localhost:5173")
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
 
-app.use(cors());
+app.use(cors({
+  origin(origin, callback) {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+      return;
+    }
+
+    callback(new Error("Not allowed by CORS"));
+  },
+}));
 app.use(express.json());
 app.use((req, res, next) => {
   const start = Date.now();
@@ -87,8 +101,8 @@ mongoose.connect(mongoUri, { serverSelectionTimeoutMS: 10000 })
   .then(() => {
     console.log("DB connected");
 
-    app.listen(5000, () => {
-      console.log("Server started on port 5000");
+    app.listen(PORT, () => {
+      console.log(`Server started on port ${PORT}`);
     });
   })
   .catch(err => {
